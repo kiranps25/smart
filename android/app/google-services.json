@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "175824095542",
+    "firebase_url": "https://homeauto-4c25b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "homeauto-4c25b",
+    "storage_bucket": "homeauto-4c25b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:175824095542:android:6975b64a1f48b389fccb97",
+        "android_client_info": {
+          "package_name": "com.example.homeauto"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLTQKUzS9nKvAfkJqYOi8I2mkcP_Rs4lY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:175824095542:android:644f65aa387b2689fccb97",
+        "android_client_info": {
+          "package_name": "com.example.homeauto2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLTQKUzS9nKvAfkJqYOi8I2mkcP_Rs4lY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
