@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
+import 'package:intl/intl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,78 +19,31 @@ class AuthWrapper extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return SplashScreen();
+          return Center(child: CircularProgressIndicator());
         }
-
         if (snapshot.hasData) {
           return HomePage();
         }
-
         return LoginPage();
       },
     );
   }
 }
 
-class SplashScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.blue[900],
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.power_settings_new, size: 80, color: Colors.yellow[700]),
-            SizedBox(height: 20),
-            Text(
-              'IoT Control',
-              style: TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 1.5,
-              ),
-            ),
-            SizedBox(height: 10),
-            Text(
-              'Smart Home Automation',
-              style: TextStyle(fontSize: 18, color: Colors.white70),
-            ),
-            SizedBox(height: 30),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.yellow[700]!),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+class LoginPage extends StatelessWidget {
+  final TextEditingController _email = TextEditingController();
+  final TextEditingController _password = TextEditingController();
 
-class LoginPage extends StatefulWidget {
-  @override
-  _LoginPageState createState() => _LoginPageState();
-}
-
-class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-
-  Future<void> _login() async {
-    setState(() => _isLoading = true);
+  Future<void> _login(BuildContext context) async {
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text.trim(),
       );
-    } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message ?? 'Authentication failed')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login failed')));
     }
   }
 
@@ -98,35 +52,29 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: EdgeInsets.all(16),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
-                controller: _emailController,
+                controller: _email,
                 decoration: InputDecoration(labelText: 'Email'),
               ),
               TextField(
-                controller: _passwordController,
+                controller: _password,
                 decoration: InputDecoration(labelText: 'Password'),
                 obscureText: true,
               ),
-              SizedBox(height: 20),
-              _isLoading
-                  ? CircularProgressIndicator()
-                  : ElevatedButton(onPressed: _login, child: Text('Login')),
+              SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => _login(context),
+                child: Text('Login'),
+              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
   }
 }
 
@@ -136,242 +84,139 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  late DatabaseReference _dbRef;
   final Map<String, Map<String, dynamic>> _devices = {
-    'LED_STATUS': {
-      'name': 'Switch 1',
-      'type': '',
-      'icon': Icons.power_settings_new,
-    },
-    'LED_STATUS1': {
-      'name': 'Switch 2',
-      'type': '',
-      'icon': Icons.power_settings_new,
-    },
-    'LED_STATUS2': {
-      'name': 'Switch 3',
-      'type': '',
-      'icon': Icons.power_settings_new,
-    },
-    'LED_STATUS3': {
-      'name': 'Switch 4',
-      'type': '',
-      'icon': Icons.power_settings_new,
-    },
+    'LED_STATUS': {'name': 'Switch 1', 'icon': Icons.power},
+    'LED_STATUS1': {'name': 'Switch 2', 'icon': Icons.power},
+    'LED_STATUS2': {'name': 'Switch 3', 'icon': Icons.power},
+    'LED_STATUS3': {'name': 'Switch 4', 'icon': Icons.power},
   };
+
   final Map<String, Timer?> _timers = {};
   final Map<String, int> _remainingTimes = {};
-  final Map<String, int> _totalTimerSeconds = {};
-  final TextEditingController _minutesController = TextEditingController();
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
 
   @override
   void initState() {
     super.initState();
-    _dbRef =
-        FirebaseDatabase.instanceFor(
-          app: Firebase.app(),
-          databaseURL:
-              "https://homeauto-4c25b-default-rtdb.asia-southeast1.firebasedatabase.app",
-        ).ref();
-
-    // Initialize timers and remaining times
-    for (var path in _devices.keys) {
-      _timers[path] = null;
-      _remainingTimes[path] = 0;
-      _totalTimerSeconds[path] = 0;
+    for (var key in _devices.keys) {
+      _timers[key] = null;
+      _remainingTimes[key] = 0;
     }
-
-    // Set up Firebase listeners
-    _setupFirebaseListeners();
+    _startPreciseScheduler();
   }
 
-  void _setupFirebaseListeners() {
-    for (var devicePath in _devices.keys) {
-      _dbRef.child(devicePath).onValue.listen((event) {
-        if (!mounted) return;
+  void _startPreciseScheduler() {
+    _checkScheduledTasks();
+    Timer.periodic(Duration(seconds: 1), (_) => _checkScheduledTasks());
+  }
 
-        if (event.snapshot.exists && event.snapshot.value != null) {
-          int status = 0;
-          int? timerStart;
-          int? timerDuration;
+  void _checkScheduledTasks() async {
+    final now = DateTime.now();
+    final formattedNow = DateFormat('HH:mm:ss').format(now);
 
-          final value = event.snapshot.value;
-          if (value is int) {
-            status = value;
-          } else if (value is Map) {
-            final data = Map<String, dynamic>.from(value);
-            status = data['status'] as int? ?? 0;
-            timerStart = data['timer_start'] as int?;
-            timerDuration = data['timer_duration'] as int?;
-          }
+    for (var key in _devices.keys) {
+      try {
+        final snapshot = await _dbRef.child(key).get();
+        final data = snapshot.value;
+        if (data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          final scheduledOn = map['scheduled_on'] ?? '';
+          final scheduledOff = map['scheduled_off'] ?? '';
 
-          if (timerStart != null && timerDuration != null && status == 1) {
-            final now = DateTime.now().millisecondsSinceEpoch;
-            final elapsed = (now - timerStart) ~/ 1000;
-            final remaining = timerDuration - elapsed;
-
-            if (remaining > 0) {
-              // Cancel existing timer if any
-              _timers[devicePath]?.cancel();
-
-              // Update remaining time
-              _remainingTimes[devicePath] = remaining;
-              _totalTimerSeconds[devicePath] = timerDuration;
-
-              // Start new timer
-              _startTimerInternal(devicePath, remaining);
-            } else {
-              // Timer expired - turn off device
-              _dbRef.child(devicePath).update({
-                'status': 0,
-                'timer_start': null,
-                'timer_duration': null,
-              });
-            }
-          } else if (_timers[devicePath] != null && status == 0) {
-            // Device was turned off manually - cancel timer
-            _timers[devicePath]?.cancel();
-            _timers[devicePath] = null;
-            _remainingTimes[devicePath] = 0;
-            setState(() {});
+          if (scheduledOn == formattedNow) {
+            await _dbRef.child(key).update({'status': 1});
+          } else if (scheduledOff == formattedNow) {
+            await _dbRef.child(key).update({
+              'status': 0,
+              'scheduled_on': '',
+              'scheduled_off': '',
+            });
           }
         }
-      });
-    }
-  }
-
-  void _startTimerInternal(String devicePath, int seconds) {
-    _timers[devicePath] = Timer.periodic(Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      setState(() {
-        if (_remainingTimes[devicePath]! > 0) {
-          _remainingTimes[devicePath] = _remainingTimes[devicePath]! - 1;
-        } else {
-          timer.cancel();
-          _timers[devicePath] = null;
-          _dbRef.child(devicePath).update({
-            'status': 0,
-            'timer_start': null,
-            'timer_duration': null,
-          });
-        }
-      });
-    });
-  }
-
-  Future<void> _toggleDevice(String devicePath, int currentStatus) async {
-    int newStatus = currentStatus == 1 ? 0 : 1;
-    try {
-      await _dbRef.child(devicePath).set({
-        'status': newStatus,
-        'timer_start': null,
-        'timer_duration': null,
-      });
-
-      if (_timers[devicePath] != null) {
-        _timers[devicePath]?.cancel();
-        _timers[devicePath] = null;
-        _remainingTimes[devicePath] = 0;
-        if (mounted) setState(() {});
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      } catch (e) {
+        print('Error checking schedule: $e');
       }
     }
   }
 
-  void _showTimerDialog(String devicePath) {
-    _minutesController.clear();
+  void _toggleDevice(String key, int status) {
+    _dbRef.child(key).update({'status': status == 1 ? 0 : 1});
+  }
+
+  void _logout() async {
+    await FirebaseAuth.instance.signOut();
+  }
+
+  String _formatTime(int? seconds) {
+    if (seconds == null || seconds <= 0) return '';
+    int minutes = seconds ~/ 60;
+    int secs = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
+  }
+
+  void _showScheduleDialog(String key) {
+    TimeOfDay? onTime;
+    TimeOfDay? offTime;
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Center(
-              child: Text("Set Timer for ${_devices[devicePath]!['name']}"),
-            ),
+            title: Text('Set Schedule'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text("Turn off after (minutes):"),
-                SizedBox(height: 10),
-                TextField(
-                  controller: _minutesController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Enter minutes',
-                  ),
+                ElevatedButton(
+                  onPressed: () async {
+                    onTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                  },
+                  child: Text('Pick ON Time'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    offTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                  },
+                  child: Text('Pick OFF Time'),
                 ),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text("Cancel"),
-              ),
-              TextButton(
                 onPressed: () {
-                  if (_minutesController.text.isNotEmpty) {
-                    int minutes = int.tryParse(_minutesController.text) ?? 0;
-                    if (minutes > 0) {
-                      Navigator.pop(context);
-                      _startTimer(devicePath, minutes);
-                    }
+                  if (onTime != null && offTime != null) {
+                    final now = DateTime.now();
+                    final format = DateFormat('HH:mm:ss');
+                    final onDate = DateTime(
+                      now.year,
+                      now.month,
+                      now.day,
+                      onTime!.hour,
+                      onTime!.minute,
+                    );
+                    final offDate = DateTime(
+                      now.year,
+                      now.month,
+                      now.day,
+                      offTime!.hour,
+                      offTime!.minute,
+                    );
+                    _dbRef.child(key).update({
+                      'scheduled_on': format.format(onDate),
+                      'scheduled_off': format.format(offDate),
+                    });
                   }
+                  Navigator.pop(context);
                 },
-                child: Text("Set Timer"),
+                child: Text('Save'),
               ),
             ],
           ),
     );
-  }
-
-  void _startTimer(String devicePath, int minutes) async {
-    _timers[devicePath]?.cancel();
-    final duration = minutes * 60;
-    final startTime = DateTime.now().millisecondsSinceEpoch;
-
-    await _dbRef.child(devicePath).set({
-      'status': 1,
-      'timer_start': startTime,
-      'timer_duration': duration,
-    });
-
-    _remainingTimes[devicePath] = duration;
-    _totalTimerSeconds[devicePath] = duration;
-
-    _startTimerInternal(devicePath, duration);
-  }
-
-  String _formatTime(int? seconds) {
-    seconds ??= 0;
-    int minutes = seconds ~/ 60;
-    int remainingSeconds = seconds % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-  }
-
-  Future<void> _logout() async {
-    try {
-      // Cancel all active timers before logging out
-      for (var timer in _timers.values) {
-        timer?.cancel();
-      }
-
-      await FirebaseAuth.instance.signOut();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Logout failed: ${e.toString()}")),
-        );
-      }
-    }
   }
 
   @override
@@ -379,7 +224,6 @@ class _HomePageState extends State<HomePage> {
     for (var timer in _timers.values) {
       timer?.cancel();
     }
-    _minutesController.dispose();
     super.dispose();
   }
 
@@ -415,8 +259,9 @@ class _HomePageState extends State<HomePage> {
                   stream: _dbRef.child(entry.key).onValue,
                   builder: (context, snapshot) {
                     int status = 0;
+                    String onTime = '--';
+                    String offTime = '--';
                     if (snapshot.hasData &&
-                        snapshot.data != null &&
                         snapshot.data!.snapshot.exists &&
                         snapshot.data!.snapshot.value != null) {
                       final value = snapshot.data!.snapshot.value;
@@ -425,87 +270,92 @@ class _HomePageState extends State<HomePage> {
                       } else if (value is Map) {
                         final data = Map<String, dynamic>.from(value);
                         status = data['status'] as int? ?? 0;
+                        onTime =
+                            data['scheduled_on']?.toString().split(' ').last ??
+                            '--';
+                        offTime =
+                            data['scheduled_off']?.toString().split(' ').last ??
+                            '--';
                       }
                     }
-
                     bool hasTimer = _timers[entry.key] != null;
                     String remainingTime = _formatTime(
                       _remainingTimes[entry.key],
                     );
-
                     return Card(
                       margin: EdgeInsets.only(bottom: 16),
                       elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
-                        onTap: () => _toggleDevice(entry.key, status),
-                        onLongPress: () => _showTimerDialog(entry.key),
-                        child: Padding(
-                          padding: EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 48,
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color:
-                                      status == 1
-                                          ? Colors.blue.withOpacity(0.2)
-                                          : Colors.grey.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  entry.value['icon'],
-                                  size: 28,
-                                  color:
-                                      status == 1 ? Colors.blue : Colors.grey,
-                                ),
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.access_time,
+                                color: Colors.grey[700],
                               ),
-                              SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      entry.value['name'],
-                                      style: GoogleFonts.nunito(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text(
-                                      entry.value['type'],
-                                      style: GoogleFonts.nunito(
-                                        fontSize: 14,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              onPressed: () => _showScheduleDialog(entry.key),
+                            ),
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color:
+                                    status == 1
+                                        ? Colors.blue.withOpacity(0.2)
+                                        : Colors.grey.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              if (hasTimer)
-                                Padding(
-                                  padding: EdgeInsets.only(right: 8),
-                                  child: Text(
-                                    remainingTime,
-                                    style: TextStyle(
-                                      fontSize: 14,
+                              child: Icon(
+                                entry.value['icon'],
+                                size: 28,
+                                color: status == 1 ? Colors.blue : Colors.grey,
+                              ),
+                            ),
+                            SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    entry.value['name'],
+                                    style: GoogleFonts.nunito(
+                                      fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.orange,
                                     ),
                                   ),
-                                ),
-                              Switch(
-                                value: status == 1,
-                                onChanged:
-                                    (value) => _toggleDevice(entry.key, status),
-                                activeColor: Colors.blue,
+                                  Text(
+                                    'ON: $onTime / OFF: $offTime',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            if (hasTimer)
+                              Padding(
+                                padding: EdgeInsets.only(right: 8),
+                                child: Text(
+                                  remainingTime,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ),
+                            Switch(
+                              value: status == 1,
+                              onChanged:
+                                  (value) => _toggleDevice(entry.key, status),
+                              activeColor: Colors.blue,
+                            ),
+                          ],
                         ),
                       ),
                     );
