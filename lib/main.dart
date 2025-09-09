@@ -6,66 +6,119 @@ import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
   runApp(MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isDarkMode = false;
+
+  void _toggleTheme() {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'IoT Control',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Color(0xFFF5F6FA),
-        textTheme: TextTheme(
-          headlineLarge: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue,
-          ),
-          bodyLarge: TextStyle(fontSize: 16, color: Colors.blueGrey[800]),
-        ),
-        appBarTheme: AppBarTheme(
-          elevation: 0,
-          backgroundColor: Colors.white,
-          titleTextStyle: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.blue,
-          ),
-        ),
-      ),
-      home: AuthWrapper(),
+      theme: _isDarkMode ? _darkTheme : _lightTheme,
+      home: AuthWrapper(onThemeToggle: _toggleTheme, isDarkMode: _isDarkMode),
     );
   }
+
+  ThemeData get _lightTheme => ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.blue,
+      brightness: Brightness.light,
+    ),
+    scaffoldBackgroundColor: const Color(0xFFF5F6FA),
+    textTheme: const TextTheme(
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.bold,
+        color: Colors.blue,
+      ),
+      bodyLarge: TextStyle(fontSize: 16, color: Colors.blueGrey),
+    ),
+    appBarTheme: const AppBarTheme(
+      elevation: 0,
+      backgroundColor: Colors.white,
+      titleTextStyle: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        color: Colors.blue,
+      ),
+    ),
+  );
+
+  ThemeData get _darkTheme => ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: Colors.blue,
+      brightness: Brightness.dark,
+    ),
+    scaffoldBackgroundColor: const Color(0xFF0F172A),
+    textTheme: const TextTheme(
+      headlineLarge: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+      bodyLarge: TextStyle(fontSize: 16, color: Colors.white70),
+    ),
+    appBarTheme: const AppBarTheme(
+      elevation: 0,
+      backgroundColor: Color(0xFF1E293B),
+      titleTextStyle: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
+    ),
+  );
 }
 
 class AuthWrapper extends StatelessWidget {
+  final VoidCallback onThemeToggle;
+  final bool isDarkMode;
+
+  const AuthWrapper({
+    Key? key,
+    required this.onThemeToggle,
+    required this.isDarkMode,
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return SplashScreen();
+          return const SplashScreen();
         }
 
         if (snapshot.hasData) {
-          return HomePage();
+          return HomePage(onThemeToggle: onThemeToggle, isDarkMode: isDarkMode);
         }
 
-        return LoginPage();
+        return const LoginPage();
       },
     );
   }
 }
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({Key? key}) : super(key: key);
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
@@ -79,7 +132,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: Duration(seconds: 2),
+      duration: const Duration(seconds: 2),
       vsync: this,
     );
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
@@ -94,8 +147,10 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.blue[900],
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.blue[900],
       body: Center(
         child: FadeTransition(
           opacity: _animation,
@@ -107,8 +162,8 @@ class _SplashScreenState extends State<SplashScreen>
                 size: 80,
                 color: Colors.yellow[700],
               ),
-              SizedBox(height: 20),
-              Text(
+              const SizedBox(height: 20),
+              const Text(
                 'IoT Control',
                 style: TextStyle(
                   fontSize: 36,
@@ -117,12 +172,12 @@ class _SplashScreenState extends State<SplashScreen>
                   letterSpacing: 1.5,
                 ),
               ),
-              SizedBox(height: 10),
-              Text(
+              const SizedBox(height: 10),
+              const Text(
                 'Smart Home Automation',
                 style: TextStyle(fontSize: 18, color: Colors.white70),
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
               CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.yellow[700]!),
               ),
@@ -135,6 +190,8 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({Key? key}) : super(key: key);
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -220,19 +277,26 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _showResetSuccessDialog(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     showDialog(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: Text('Password Reset Sent'),
+            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            title: Text(
+              'Password Reset Sent',
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+            ),
             content: Text(
               'A password reset link has been sent to ${_emailController.text}. '
               'Please check your email.',
+              style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: Text('OK'),
+                child: const Text('OK'),
               ),
             ],
           ),
@@ -269,39 +333,59 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor:
+          isDark ? const Color(0xFF0F172A) : const Color(0xFFF5F6FA),
       body: Center(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.power_settings_new, size: 80, color: Colors.blue),
-                SizedBox(height: 20),
+                Icon(
+                  Icons.power_settings_new,
+                  size: 80,
+                  color: isDark ? Colors.yellow[300] : Colors.blue,
+                ),
+                const SizedBox(height: 20),
                 Text(
                   _showRegistration ? 'Create Account' : 'Welcome Back',
-                  style: Theme.of(context).textTheme.headlineLarge,
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.blue,
+                  ),
                 ),
-                SizedBox(height: 30),
+                const SizedBox(height: 30),
                 if (_errorMessage != null)
                   Padding(
-                    padding: EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
                       _errorMessage!,
-                      style: TextStyle(color: Colors.red),
+                      style: const TextStyle(color: Colors.red),
                     ),
                   ),
                 TextFormField(
                   controller: _emailController,
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
                   decoration: InputDecoration(
                     labelText: 'Email',
-                    prefixIcon: Icon(Icons.email),
+                    labelStyle: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.blueGrey[600],
+                    ),
+                    prefixIcon: Icon(
+                      Icons.email,
+                      color: isDark ? Colors.white70 : Colors.blueGrey[600],
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -314,17 +398,25 @@ class _LoginPageState extends State<LoginPage> {
                     return null;
                   },
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    prefixIcon: Icon(Icons.lock),
+                    labelStyle: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.blueGrey[600],
+                    ),
+                    prefixIcon: Icon(
+                      Icons.lock,
+                      color: isDark ? Colors.white70 : Colors.blueGrey[600],
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
                             ? Icons.visibility
                             : Icons.visibility_off,
+                        color: isDark ? Colors.white70 : Colors.blueGrey[600],
                       ),
                       onPressed: () {
                         setState(() => _obscurePassword = !_obscurePassword);
@@ -333,6 +425,8 @@ class _LoginPageState extends State<LoginPage> {
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
                   ),
                   obscureText: _obscurePassword,
                   validator: (value) {
@@ -345,12 +439,12 @@ class _LoginPageState extends State<LoginPage> {
                     return null;
                   },
                 ),
-                SizedBox(height: 24),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -363,22 +457,27 @@ class _LoginPageState extends State<LoginPage> {
                             : _signIn,
                     child:
                         _isLoading
-                            ? CircularProgressIndicator(
+                            ? const CircularProgressIndicator(
                               valueColor: AlwaysStoppedAnimation(Colors.white),
                             )
                             : Text(
                               _showRegistration ? 'REGISTER' : 'LOGIN',
-                              style: TextStyle(fontSize: 16),
+                              style: const TextStyle(fontSize: 16),
                             ),
                   ),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 if (!_showRegistration) ...[
                   TextButton(
                     onPressed: _resetPassword,
-                    child: Text('Forgot Password?'),
+                    child: Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        color: isDark ? Colors.blue[300] : Colors.blue,
+                      ),
+                    ),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                 ],
                 TextButton(
                   onPressed: () {
@@ -391,6 +490,9 @@ class _LoginPageState extends State<LoginPage> {
                     _showRegistration
                         ? 'Already have an account? Login'
                         : 'Need an account? Register',
+                    style: TextStyle(
+                      color: isDark ? Colors.blue[300] : Colors.blue,
+                    ),
                   ),
                 ),
               ],
